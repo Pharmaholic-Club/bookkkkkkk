@@ -28,6 +28,8 @@
         --accent-soft: #E2F6EE;
         --danger: #F1585F;
         --danger-soft: #FDE8E9;
+        --warn: #E8A93C;
+        --warn-soft: #FDF1DC;
         --border: #E1F0E8;
         --shadow-sm: 0 2px 10px rgba(30, 80, 65, 0.07);
         --shadow-md: 0 14px 34px rgba(30, 80, 65, 0.10);
@@ -229,6 +231,19 @@
         margin-top: 2px;
       }
       .liff-badge.pending { color: var(--text-muted); background: var(--surface-soft); }
+      .liff-badge.warn { color: #A97417; background: var(--warn-soft); }
+
+      .add-friend-link {
+        display: inline-block;
+        margin-top: 8px;
+        font-size: 0.78em;
+        font-weight: 600;
+        color: #fff;
+        background: var(--warn);
+        padding: 7px 16px;
+        border-radius: 999px;
+        text-decoration: none;
+      }
 
       /* ---------------- Tabs ---------------- */
       .nav-tabs {
@@ -586,6 +601,7 @@
           <h2>Pharmholic Band Club</h2>
           <span class="tagline">ระบบจองห้องซ้อมดนตรี</span>
           <span class="liff-badge pending" id="liffStatus">🔄 กำลังเชื่อมบัญชี LINE...</span>
+          <a href="#" class="add-friend-link hidden" id="addFriendBtn" target="_blank" rel="noopener">➕ แอดเพื่อนเพื่อรับแจ้งเตือน</a>
           <div id="liffDebug" style="font-size:0.62em;color:#B7C8C2;margin-top:6px;text-align:left;max-width:100%;word-break:break-all;line-height:1.6;"></div>
         </div>
 
@@ -670,6 +686,13 @@
          ========================================================= */
       const API_URL = 'https://script.google.com/macros/s/AKfycbyA_ZZZpA_uAQaYoG0Opa7Ji2P0Vf4lZCZA6gu--FnSDxuBFRl1AujBjdTr-n3tT8wrGA/exec'; // เช่น https://script.google.com/macros/s/AKfycb.../exec
 
+      /* =========================================================
+         BASIC_ID ของ LINE OA — ใส่ตรงนี้เพื่อให้ปุ่ม "แอดเพื่อน" ทำงาน
+         หาได้จาก LINE Official Account Manager > การตั้งค่า > บัญชีทางการ
+         รูปแบบเช่น '@abcde123' (มี @ นำหน้า)
+         ========================================================= */
+      const OA_BASIC_ID = ''; // เช่น '@pharmholic'
+
       /* ---------------- fetch helpers (แทน google.script.run) ----------------
          หมายเหตุสำคัญ: ห้ามตั้ง header 'Content-Type: application/json' ใน POST
          เพราะจะทำให้ browser ยิง preflight (OPTIONS) ซึ่ง Apps Script Web App
@@ -721,12 +744,27 @@
       const LIFF_ID = '2008668752-dTPoSY7m';
       let currentUserId = '';
       let liffSettled = false;
+      let isFriend = false; // FIX: เก็บสถานะแอดเพื่อน เพื่อเตือน user ก่อนจอง
+                              // (push message ส่งได้เฉพาะคนที่แอดเพื่อน OA แล้วเท่านั้น
+                              //  ไม่งั้นจะเจอ error 400 "Failed to send messages" เสมอ)
 
-      function setLiffStatus(text, ok) {
+      function setLiffStatus(text, level) {
+        // level: 'ok' | 'pending' | 'warn'
         var el = document.getElementById('liffStatus');
         if (!el) return;
         el.textContent = text;
-        el.classList.toggle('pending', !ok);
+        el.classList.remove('pending', 'warn');
+        if (level === 'pending') el.classList.add('pending');
+        if (level === 'warn') el.classList.add('warn');
+      }
+
+      function showAddFriendButton() {
+        var btn = document.getElementById('addFriendBtn');
+        if (!btn) return;
+        if (OA_BASIC_ID) {
+          btn.href = 'https://line.me/R/ti/p/' + encodeURIComponent(OA_BASIC_ID);
+          btn.classList.remove('hidden');
+        }
       }
 
       function liffDebugLog(step) {
@@ -742,7 +780,7 @@
         var timeoutId = setTimeout(function () {
           if (!liffSettled) {
             liffDebugLog('⏱️ หมดเวลา 8 วิ — ค้างอยู่ขั้นก่อนหน้านี้');
-            setLiffStatus('⚠️ เชื่อมต่อไม่สำเร็จ (หมดเวลา) — จองแบบไม่ผูก LINE ได้ตามปกติ', false);
+            setLiffStatus('⚠️ เชื่อมต่อไม่สำเร็จ (หมดเวลา) — จองแบบไม่ผูก LINE ได้ตามปกติ', 'warn');
           }
         }, 8000);
 
@@ -750,7 +788,7 @@
           liffDebugLog('❌ liff SDK ไม่ถูกโหลด (typeof liff === undefined)');
           liffSettled = true;
           clearTimeout(timeoutId);
-          setLiffStatus('⚠️ โหลด LINE SDK ไม่สำเร็จ — จองแบบไม่ผูก LINE', false);
+          setLiffStatus('⚠️ โหลด LINE SDK ไม่สำเร็จ — จองแบบไม่ผูก LINE', 'warn');
           return;
         }
         liffDebugLog('✅ liff SDK โหลดสำเร็จ');
@@ -758,20 +796,32 @@
         liff.init({ liffId: LIFF_ID }).then(function () {
           liffDebugLog('✅ liff.init() สำเร็จ, isLoggedIn=' + liff.isLoggedIn() + ', isInClient=' + liff.isInClient());
           if (liff.isLoggedIn()) {
-            liffDebugLog('กำลังเรียก liff.getProfile()...');
-            return liff.getProfile();
+            liffDebugLog('กำลังเรียก liff.getProfile() + liff.getFriendship()...');
+            // FIX: ดึงสถานะแอดเพื่อนควบคู่ไปกับ profile เลย ต้อง enable
+            // scope "Friendship status" ของ LIFF app นี้ใน LINE Developers Console ก่อน
+            return Promise.all([liff.getProfile(), liff.getFriendship()]);
           }
           liffDebugLog('⚠️ ยังไม่ login — ข้ามการผูกบัญชี (ไม่เรียก liff.login() เพื่อกันหน้าค้าง)');
           return null;
-        }).then(function (profile) {
+        }).then(function (result) {
           liffSettled = true;
           clearTimeout(timeoutId);
-          if (profile && profile.userId) {
+          if (result && result[0] && result[0].userId) {
+            var profile = result[0];
+            var friendship = result[1];
             currentUserId = profile.userId;
-            liffDebugLog('✅ ได้ profile: ' + profile.displayName);
-            setLiffStatus('✅ เชื่อมบัญชี LINE แล้ว: ' + profile.displayName, true);
+            isFriend = !!(friendship && friendship.friendFlag);
+
+            liffDebugLog('✅ ได้ profile: ' + profile.displayName + ', friendFlag=' + isFriend);
+
+            if (isFriend) {
+              setLiffStatus('✅ เชื่อมบัญชี LINE แล้ว: ' + profile.displayName, 'ok');
+            } else {
+              setLiffStatus('⚠️ ยังไม่ได้แอดเพื่อนบอท — จองได้ แต่จะไม่ได้รับแจ้งเตือนในไลน์', 'warn');
+              showAddFriendButton();
+            }
           } else {
-            setLiffStatus('⚠️ เปิดผ่านปุ่มในแอป LINE เพื่อผูกบัญชี (จองแบบไม่ผูกได้เช่นกัน)', false);
+            setLiffStatus('⚠️ เปิดผ่านปุ่มในแอป LINE เพื่อผูกบัญชี (จองแบบไม่ผูกได้เช่นกัน)', 'warn');
           }
         }).catch(function (err) {
           liffSettled = true;
@@ -779,7 +829,7 @@
           var msg = (err && (err.message || err.code)) ? (err.message || err.code) : String(err);
           liffDebugLog('❌ error: ' + msg);
           console.error('LIFF init/profile failed:', err);
-          setLiffStatus('⚠️ จองแบบไม่ผูก LINE (เชื่อมต่อไม่สำเร็จ: ' + msg + ')', false);
+          setLiffStatus('⚠️ จองแบบไม่ผูก LINE (เชื่อมต่อไม่สำเร็จ: ' + msg + ')', 'warn');
         });
       }
       initLiff();
@@ -926,59 +976,91 @@
         var bookingCode = generateBookingCode();
         localStorage.setItem('bookerName', nameVal);
 
-        setButtonLoading(btn, true, 'กำลังบันทึก...', 'ยืนยันการจอง');
+        function doSubmit() {
+          setButtonLoading(btn, true, 'กำลังบันทึก...', 'ยืนยันการจอง');
 
-        apiPost('checkAndBook', {
-          name: nameVal,
-          eventDetails: form.eventDetails.value,
-          date: form.date.value,
-          startTime: form.startTime.value,
-          duration: form.duration.value,
-          code: bookingCode,
-          lineUserId: currentUserId
-        }).then(function (res) {
-          setButtonLoading(btn, false, 'กำลังบันทึก...', 'ยืนยันการจอง');
+          apiPost('checkAndBook', {
+            name: nameVal,
+            eventDetails: form.eventDetails.value,
+            date: form.date.value,
+            startTime: form.startTime.value,
+            duration: form.duration.value,
+            code: bookingCode,
+            lineUserId: currentUserId
+          }).then(function (res) {
+            setButtonLoading(btn, false, 'กำลังบันทึก...', 'ยืนยันการจอง');
 
-          if (res.status === 'success') {
-            rememberMyBooking(res.id, bookingCode);
+            if (res.status === 'success') {
+              rememberMyBooking(res.id, bookingCode);
 
-            var lineNote = currentUserId
-              ? '<div style="color:#93A8A0;font-size:0.78em;margin-top:10px;">ระบบส่งข้อความแจ้งเตือนไปที่ LINE ของคุณแล้ว และยกเลิกได้ทุกเมื่อโดยพิมพ์ "คิวของฉัน" ในแชท</div>'
-              : '<div style="color:#93A8A0;font-size:0.78em;margin-top:10px;">อุปกรณ์นี้จำการจองไว้ให้แล้ว ยกเลิกได้ทันทีในแท็บ "เช็ค/ยกเลิก" โดยไม่ต้องใส่โค้ดซ้ำ หรือพิมพ์โค้ดนี้ในแชท LINE เพื่อยกเลิกก็ได้ครับ</div>';
-
-            Swal.fire({
-              icon: 'success',
-              title: 'จองสำเร็จ!',
-              html:
-                '<div style="color:#93A8A0;font-size:0.9em;margin-bottom:4px;">โค้ดยกเลิกของคุณ — เก็บไว้ให้ดี</div>' +
-                '<div style="font-size:1.7em;font-weight:700;letter-spacing:6px;color:#45B399;margin:6px 0;">' + bookingCode + '</div>' +
-                '<button id="copyCodeBtn" style="border:1px solid #E1F0E8;background:#F2FAF6;color:#1E3630;padding:8px 14px;border-radius:10px;font-family:Kanit,sans-serif;font-size:0.85em;cursor:pointer;">📋 คัดลอกโค้ด</button>' +
-                lineNote,
-              confirmButtonText: 'รับทราบ',
-              background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399',
-              didOpen: function () {
-                var b = document.getElementById('copyCodeBtn');
-                if (b) b.addEventListener('click', function () { copyCode(bookingCode); });
+              // FIX: ข้อความแจ้งผลตอนนี้ขึ้นกับสถานะแอดเพื่อนจริง (isFriend)
+              // แทนที่จะสันนิษฐานว่ามี currentUserId แล้วจะได้แจ้งเตือนเสมอ
+              var lineNote;
+              if (currentUserId && isFriend) {
+                lineNote = '<div style="color:#93A8A0;font-size:0.78em;margin-top:10px;">ระบบส่งข้อความแจ้งเตือนไปที่ LINE ของคุณแล้ว และยกเลิกได้ทุกเมื่อโดยพิมพ์ "คิวของฉัน" ในแชท</div>';
+              } else if (currentUserId && !isFriend) {
+                lineNote = '<div style="color:#A97417;font-size:0.78em;margin-top:10px;">⚠️ ยังไม่ได้แอดเพื่อนบอท จึงไม่ได้รับข้อความแจ้งเตือน — อุปกรณ์นี้จำการจองไว้ให้แล้ว ยกเลิกได้ในแท็บ "เช็ค/ยกเลิก" หรือเก็บโค้ดด้านบนไว้ยกเลิกทีหลังก็ได้ครับ</div>';
+              } else {
+                lineNote = '<div style="color:#93A8A0;font-size:0.78em;margin-top:10px;">อุปกรณ์นี้จำการจองไว้ให้แล้ว ยกเลิกได้ทันทีในแท็บ "เช็ค/ยกเลิก" โดยไม่ต้องใส่โค้ดซ้ำ หรือพิมพ์โค้ดนี้ในแชท LINE เพื่อยกเลิกก็ได้ครับ</div>';
               }
-            });
 
-            form.reset();
-            form.name.value = nameVal;
-            document.getElementById('bookDate').value = today;
-            updateAvailableTimes();
-          } else {
+              Swal.fire({
+                icon: 'success',
+                title: 'จองสำเร็จ!',
+                html:
+                  '<div style="color:#93A8A0;font-size:0.9em;margin-bottom:4px;">โค้ดยกเลิกของคุณ — เก็บไว้ให้ดี</div>' +
+                  '<div style="font-size:1.7em;font-weight:700;letter-spacing:6px;color:#45B399;margin:6px 0;">' + bookingCode + '</div>' +
+                  '<button id="copyCodeBtn" style="border:1px solid #E1F0E8;background:#F2FAF6;color:#1E3630;padding:8px 14px;border-radius:10px;font-family:Kanit,sans-serif;font-size:0.85em;cursor:pointer;">📋 คัดลอกโค้ด</button>' +
+                  lineNote,
+                confirmButtonText: 'รับทราบ',
+                background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399',
+                didOpen: function () {
+                  var b = document.getElementById('copyCodeBtn');
+                  if (b) b.addEventListener('click', function () { copyCode(bookingCode); });
+                }
+              });
+
+              form.reset();
+              form.name.value = nameVal;
+              document.getElementById('bookDate').value = today;
+              updateAvailableTimes();
+            } else {
+              Swal.fire({
+                icon: 'error', title: 'ไม่ได้ครับ', text: res.message,
+                background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399'
+              });
+            }
+          }).catch(function (err) {
+            setButtonLoading(btn, false, 'กำลังบันทึก...', 'ยืนยันการจอง');
             Swal.fire({
-              icon: 'error', title: 'ไม่ได้ครับ', text: res.message,
+              icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(err),
               background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399'
             });
-          }
-        }).catch(function (err) {
-          setButtonLoading(btn, false, 'กำลังบันทึก...', 'ยืนยันการจอง');
-          Swal.fire({
-            icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(err),
-            background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399'
           });
-        });
+        }
+
+        // FIX: ถ้ารู้อยู่แล้วว่า user ยังไม่แอดเพื่อน เตือนก่อนจองจริง (ไม่บล็อกการจอง
+        // แค่แจ้งให้รู้ล่วงหน้าว่าจะไม่ได้รับข้อความแจ้งเตือนในไลน์)
+        if (currentUserId && !isFriend) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'ยังไม่ได้แอดเพื่อนบอท',
+            text: 'ถ้าจองตอนนี้จะไม่ได้รับข้อความแจ้งเตือนในไลน์ ต้องการจองต่อเลยไหมครับ?',
+            showCancelButton: true,
+            confirmButtonText: 'จองต่อเลย',
+            cancelButtonText: 'ไปแอดเพื่อนก่อน',
+            confirmButtonColor: '#45B399', cancelButtonColor: '#E1F0E8',
+            background: '#fff', color: '#1E3630'
+          }).then(function (result) {
+            if (result.isConfirmed) {
+              doSubmit();
+            } else if (OA_BASIC_ID) {
+              window.open('https://line.me/R/ti/p/' + encodeURIComponent(OA_BASIC_ID), '_blank');
+            }
+          });
+        } else {
+          doSubmit();
+        }
       });
 
       function initials(name) {
