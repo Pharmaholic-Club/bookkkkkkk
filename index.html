@@ -602,7 +602,6 @@
           <span class="tagline">ระบบจองห้องซ้อมดนตรี</span>
           <span class="liff-badge pending" id="liffStatus">🔄 กำลังเชื่อมบัญชี LINE...</span>
           <a href="#" class="add-friend-link hidden" id="addFriendBtn" target="_blank" rel="noopener">➕ แอดเพื่อนเพื่อรับแจ้งเตือน</a>
-          <div id="liffDebug" style="font-size:0.62em;color:#B7C8C2;margin-top:6px;text-align:left;max-width:100%;word-break:break-all;line-height:1.6;"></div>
         </div>
 
         <div class="nav-tabs">
@@ -744,7 +743,7 @@
       const LIFF_ID = '2007738091-W3Vn8YPL';
       let currentUserId = '';
       let liffSettled = false;
-      let isFriend = false; // FIX: เก็บสถานะแอดเพื่อน เพื่อเตือน user ก่อนจอง
+      let isFriend = false; // เก็บสถานะแอดเพื่อน เพื่อเตือน user ก่อนจอง
                               // (push message ส่งได้เฉพาะคนที่แอดเพื่อน OA แล้วเท่านั้น
                               //  ไม่งั้นจะเจอ error 400 "Failed to send messages" เสมอ)
 
@@ -767,65 +766,41 @@
         }
       }
 
-      function liffDebugLog(step) {
-        var el = document.getElementById('liffDebug');
-        if (!el) return;
-        var t = new Date().toLocaleTimeString('th-TH', { hour12: false });
-        el.innerHTML += t + ' — ' + step + '<br>';
-      }
-
       function initLiff() {
-        liffDebugLog('เริ่ม initLiff()');
-
         var timeoutId = setTimeout(function () {
           if (!liffSettled) {
-            liffDebugLog('⏱️ หมดเวลา 8 วิ — ค้างอยู่ขั้นก่อนหน้านี้');
             setLiffStatus('⚠️ เชื่อมต่อไม่สำเร็จ (หมดเวลา) — จองแบบไม่ผูก LINE ได้ตามปกติ', 'warn');
           }
         }, 8000);
 
         if (typeof liff === 'undefined') {
-          liffDebugLog('❌ liff SDK ไม่ถูกโหลด (typeof liff === undefined)');
           liffSettled = true;
           clearTimeout(timeoutId);
           setLiffStatus('⚠️ โหลด LINE SDK ไม่สำเร็จ — จองแบบไม่ผูก LINE', 'warn');
           return;
         }
-        liffDebugLog('✅ liff SDK โหลดสำเร็จ');
 
         liff.init({ liffId: LIFF_ID }).then(function () {
-          liffDebugLog('✅ liff.init() สำเร็จ, isLoggedIn=' + liff.isLoggedIn() + ', isInClient=' + liff.isInClient());
           if (liff.isLoggedIn()) {
-            liffDebugLog('กำลังเรียก liff.getProfile()...');
-            // FIX สำคัญ: แยก getProfile() ออกจาก getFriendship() เป็นคนละ call
-            // เดิมใช้ Promise.all([getProfile(), getFriendship()]) ถ้า getFriendship()
-            // reject (เช่น ยังไม่ได้เปิด permission "Friendship status" ให้ LIFF app นี้
-            // ใน LINE Developers Console) จะทำให้ Promise.all พังไปทั้งคู่ทันที
-            // -> currentUserId ไม่เคยถูกตั้งค่าเลย แม้ getProfile() จะสำเร็จ
-            // -> ตอนจอง lineUserId ที่ส่งไปเป็นค่าว่าง -> push แจ้งเตือนไม่ทำงาน
-            //    และ "คิวของฉัน" (ถามผ่านแชท LINE) หา booking ไม่เจอ เพราะคอลัมน์
-            //    LineUserId ในชีตว่างเปล่า ไม่ตรงกับ userId จริงของผู้ใช้
+            // แยก getProfile() ออกจาก getFriendship() เป็นคนละ call
+            // เพื่อไม่ให้ getFriendship() ที่อาจ reject (เช่น ยังไม่ได้เปิด permission
+            // "Friendship status" ให้ LIFF app นี้ใน LINE Developers Console) พา
+            // currentUserId ที่ได้จาก getProfile() พังไปด้วย
             return liff.getProfile().then(function (profile) {
-              liffDebugLog('✅ ได้ profile: ' + profile.displayName);
               currentUserId = profile.userId;
               setLiffStatus('✅ เชื่อมบัญชี LINE แล้ว: ' + profile.displayName, 'ok');
 
-              // เช็คสถานะแอดเพื่อนแยกต่างหาก ถ้า fail ก็ไม่กระทบ currentUserId ที่ได้มาแล้ว
               return liff.getFriendship().then(function (friendship) {
                 isFriend = !!(friendship && friendship.friendFlag);
-                liffDebugLog('✅ friendFlag=' + isFriend);
                 if (!isFriend) {
                   setLiffStatus('⚠️ ยังไม่ได้แอดเพื่อนบอท — จองได้ แต่จะไม่ได้รับแจ้งเตือนในไลน์', 'warn');
                   showAddFriendButton();
                 }
-              }).catch(function (fErr) {
-                var fMsg = (fErr && (fErr.message || fErr.code)) ? (fErr.message || fErr.code) : String(fErr);
-                liffDebugLog('⚠️ getFriendship() ล้มเหลว (ไม่กระทบ userId ที่ได้แล้ว): ' + fMsg);
+              }).catch(function () {
                 isFriend = false;
               });
             });
           }
-          liffDebugLog('⚠️ ยังไม่ login — ข้ามการผูกบัญชี (ไม่เรียก liff.login() เพื่อกันหน้าค้าง)');
           return null;
         }).then(function () {
           liffSettled = true;
@@ -837,8 +812,6 @@
           liffSettled = true;
           clearTimeout(timeoutId);
           var msg = (err && (err.message || err.code)) ? (err.message || err.code) : String(err);
-          liffDebugLog('❌ error: ' + msg);
-          console.error('LIFF init/profile failed:', err);
           setLiffStatus('⚠️ จองแบบไม่ผูก LINE (เชื่อมต่อไม่สำเร็จ: ' + msg + ')', 'warn');
         });
       }
@@ -1003,7 +976,7 @@
             if (res.status === 'success') {
               rememberMyBooking(res.id, bookingCode);
 
-              // FIX: ข้อความแจ้งผลตอนนี้ขึ้นกับสถานะแอดเพื่อนจริง (isFriend)
+              // ข้อความแจ้งผลตอนนี้ขึ้นกับสถานะแอดเพื่อนจริง (isFriend)
               // แทนที่จะสันนิษฐานว่ามี currentUserId แล้วจะได้แจ้งเตือนเสมอ
               var lineNote;
               if (currentUserId && isFriend) {
@@ -1049,7 +1022,7 @@
           });
         }
 
-        // FIX: ถ้ารู้อยู่แล้วว่า user ยังไม่แอดเพื่อน เตือนก่อนจองจริง (ไม่บล็อกการจอง
+        // ถ้ารู้อยู่แล้วว่า user ยังไม่แอดเพื่อน เตือนก่อนจองจริง (ไม่บล็อกการจอง
         // แค่แจ้งให้รู้ล่วงหน้าว่าจะไม่ได้รับข้อความแจ้งเตือนในไลน์)
         if (currentUserId && !isFriend) {
           Swal.fire({
