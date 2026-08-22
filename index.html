@@ -43,13 +43,8 @@
       * { box-sizing: border-box; }
 
       body {
-        background-image:
-          linear-gradient(180deg, rgba(234,248,242,0.35) 0%, rgba(217,240,230,0.55) 100%),
-          var(--scene-mobile);
-        background-size: cover;
-        background-position: center top;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+        position: relative;
+        isolation: isolate;
         color: var(--text);
         font-family: 'Kanit', sans-serif;
         margin: 0;
@@ -60,8 +55,52 @@
         -webkit-tap-highlight-color: transparent;
       }
 
+      /* Slow Ken-Burns drift on the camping photo behind everything */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: -5%;
+        z-index: -3;
+        background-image:
+          linear-gradient(180deg, rgba(234,248,242,0.35) 0%, rgba(217,240,230,0.55) 100%),
+          var(--scene-mobile);
+        background-size: cover;
+        background-position: center top;
+        background-repeat: no-repeat;
+        animation: kenBurns 32s ease-in-out infinite alternate;
+        will-change: transform;
+      }
+      @keyframes kenBurns {
+        0%   { transform: scale(1) translate(0, 0); }
+        100% { transform: scale(1.07) translate(-1.2%, -1%); }
+      }
+
+      /* Softly drifting fireflies / ambient light specks over the photo */
+      .firefly {
+        position: fixed;
+        z-index: -2;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,236,180,0.95) 0%, rgba(255,236,180,0.35) 45%, rgba(255,236,180,0) 75%);
+        filter: blur(0.5px);
+        pointer-events: none;
+        opacity: 0;
+        animation: fireflyDrift 14s ease-in-out infinite;
+      }
+      .firefly.f1 { width: 10px; height: 10px; left: 12%; bottom: 22%; animation-delay: 0s; }
+      .firefly.f2 { width: 7px;  height: 7px;  left: 78%; bottom: 32%; animation-delay: 2.5s; }
+      .firefly.f3 { width: 8px;  height: 8px;  left: 55%; bottom: 14%; animation-delay: 5s; }
+      .firefly.f4 { width: 6px;  height: 6px;  left: 32%; bottom: 40%; animation-delay: 7.5s; }
+      .firefly.f5 { width: 9px;  height: 9px;  left: 88%; bottom: 12%; animation-delay: 3.8s; }
+      @keyframes fireflyDrift {
+        0%   { transform: translate(0, 0); opacity: 0; }
+        15%  { opacity: 0.9; }
+        50%  { transform: translate(18px, -34px); opacity: 0.5; }
+        85%  { opacity: 0.7; }
+        100% { transform: translate(-10px, -60px); opacity: 0; }
+      }
+
       @media (min-width: 720px) {
-        body {
+        body::before {
           background-image:
             linear-gradient(180deg, rgba(234,248,242,0.30) 0%, rgba(217,240,230,0.50) 100%),
             var(--scene-desktop);
@@ -238,23 +277,52 @@
       }
 
       .container {
+        position: relative;
         width: 100%;
         background: rgba(255, 255, 255, 0.55);
         -webkit-backdrop-filter: blur(10px) saturate(150%);
         backdrop-filter: blur(10px) saturate(150%);
         padding: 30px 28px;
         border-radius: 30px;
-        box-shadow: 0 24px 60px rgba(20, 60, 50, 0.22), 0 2px 0 rgba(255,255,255,0.6) inset;
         border: 1px solid rgba(255,255,255,0.55);
+        box-shadow: 0 24px 60px rgba(20, 60, 50, 0.22), 0 2px 0 rgba(255,255,255,0.6) inset;
         box-sizing: border-box;
         opacity: 0;
         transform: translateY(16px);
-        animation: fadeUp 0.7s var(--ease) forwards;
-        animation-delay: 0.12s;
+        animation: fadeUp 0.7s var(--ease) forwards, glowPulse 7s ease-in-out infinite 1.2s;
+        overflow: hidden;
       }
       @keyframes fadeUp {
         to { opacity: 1; transform: translateY(0); }
       }
+      @keyframes glowPulse {
+        0%, 100% { box-shadow: 0 24px 60px rgba(20, 60, 50, 0.22), 0 2px 0 rgba(255,255,255,0.6) inset, 0 0 0 rgba(159,227,207,0); }
+        50%      { box-shadow: 0 24px 60px rgba(20, 60, 50, 0.22), 0 2px 0 rgba(255,255,255,0.6) inset, 0 0 46px rgba(159,227,207,0.35); }
+      }
+      /* Gradient hairline ring around the glass card, like light catching an edge */
+      .container::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.05) 45%, rgba(159,227,207,0.65) 100%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+                mask-composite: exclude;
+        pointer-events: none;
+      }
+      /* Soft top sheen suggesting glass reflecting light */
+      .container::after {
+        content: "";
+        position: absolute;
+        top: 0; left: 8%; right: 8%;
+        height: 40%;
+        border-radius: 100% 100% 60% 60% / 100% 100% 20% 20%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+      }
+      .container > * { position: relative; z-index: 1; }
 
       /* ---------------- Header ---------------- */
       .brand {
@@ -361,8 +429,16 @@
         font-size: 0.88em;
         color: var(--text-muted);
         margin-bottom: 8px;
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-weight: 500;
+      }
+      label .label-icon {
+        width: 15px;
+        height: 15px;
+        color: var(--fade-3);
+        flex-shrink: 0;
       }
 
       .field { margin-bottom: 20px; }
@@ -405,6 +481,7 @@
 
       /* ---------------- Buttons ---------------- */
       .btn-main {
+        position: relative;
         width: 100%;
         padding: 17px;
         background: var(--grad);
@@ -422,7 +499,19 @@
         align-items: center;
         justify-content: center;
         gap: 10px;
+        overflow: hidden;
       }
+      .btn-main::after {
+        content: "";
+        position: absolute;
+        top: 0; left: -60%;
+        width: 40%; height: 100%;
+        background: linear-gradient(120deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%);
+        transform: skewX(-20deg);
+        transition: left 0.7s var(--ease);
+        pointer-events: none;
+      }
+      .btn-main:hover:not(:disabled)::after { left: 130%; }
       .btn-main:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(74, 179, 156, 0.40); }
       .btn-main:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: 0 6px 16px rgba(74, 179, 156, 0.28); }
       .btn-main:disabled { background: #DCE9E3; color: #A3B8B0; cursor: not-allowed; box-shadow: none; }
@@ -644,6 +733,13 @@
   </head>
   <body>
 
+    <!-- Ambient fireflies drifting over the background photo -->
+    <div class="firefly f1"></div>
+    <div class="firefly f2"></div>
+    <div class="firefly f3"></div>
+    <div class="firefly f4"></div>
+    <div class="firefly f5"></div>
+
     <!-- Splash / loading screen -->
     <div id="splash">
       <div class="splash-blob b1"></div>
@@ -700,29 +796,29 @@
 
           <form id="bookingForm">
             <div class="field">
-              <label>ชื่อผู้จอง / ชื่อเล่น</label>
+              <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>ชื่อผู้จอง / ชื่อเล่น</label>
               <input type="text" name="name" placeholder="เช่น ทีม 5PD" required>
             </div>
 
             <div class="field">
-              <label>ทำกิจกรรมอะไร (Event)</label>
+              <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>ทำกิจกรรมอะไร (Event)</label>
               <input type="text" name="eventDetails" placeholder="เช่น ซ้อมดนตรี, อัดเพลง, ประชุม" required>
             </div>
 
             <div class="field">
-              <label>วันที่ต้องการจอง</label>
+              <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="4"/><path d="M16 3v3M8 3v3M3 10h18"/></svg>วันที่ต้องการจอง</label>
               <input type="date" name="date" required id="bookDate" onchange="updateAvailableTimes()">
             </div>
 
             <div class="row-flex">
               <div style="flex: 2;">
-                <label>เริ่มเวลา</label>
+                <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>เริ่มเวลา</label>
                 <select name="startTime" id="startTime">
                   <option value="">รอโหลดเวลา...</option>
                 </select>
               </div>
               <div style="flex: 1;">
-                <label>จำนวน ชม.</label>
+                <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/></svg>จำนวน ชม.</label>
                 <select name="duration" id="duration">
                   <option value="1">1 ชม.</option>
                   <option value="2">2 ชม.</option>
@@ -740,7 +836,7 @@
 
         <div id="page-check" class="hidden">
           <div class="field">
-            <label>เลือกวันที่เพื่อดูตาราง</label>
+            <label><svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.7-4.7"/></svg>เลือกวันที่เพื่อดูตาราง</label>
             <input type="date" id="checkDate" onchange="loadBookings()">
           </div>
 
