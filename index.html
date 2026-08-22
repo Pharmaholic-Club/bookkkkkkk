@@ -796,31 +796,41 @@
         liff.init({ liffId: LIFF_ID }).then(function () {
           liffDebugLog('✅ liff.init() สำเร็จ, isLoggedIn=' + liff.isLoggedIn() + ', isInClient=' + liff.isInClient());
           if (liff.isLoggedIn()) {
-            liffDebugLog('กำลังเรียก liff.getProfile() + liff.getFriendship()...');
-            // FIX: ดึงสถานะแอดเพื่อนควบคู่ไปกับ profile เลย ต้อง enable
-            // scope "Friendship status" ของ LIFF app นี้ใน LINE Developers Console ก่อน
-            return Promise.all([liff.getProfile(), liff.getFriendship()]);
+            liffDebugLog('กำลังเรียก liff.getProfile()...');
+            // FIX สำคัญ: แยก getProfile() ออกจาก getFriendship() เป็นคนละ call
+            // เดิมใช้ Promise.all([getProfile(), getFriendship()]) ถ้า getFriendship()
+            // reject (เช่น ยังไม่ได้เปิด permission "Friendship status" ให้ LIFF app นี้
+            // ใน LINE Developers Console) จะทำให้ Promise.all พังไปทั้งคู่ทันที
+            // -> currentUserId ไม่เคยถูกตั้งค่าเลย แม้ getProfile() จะสำเร็จ
+            // -> ตอนจอง lineUserId ที่ส่งไปเป็นค่าว่าง -> push แจ้งเตือนไม่ทำงาน
+            //    และ "คิวของฉัน" (ถามผ่านแชท LINE) หา booking ไม่เจอ เพราะคอลัมน์
+            //    LineUserId ในชีตว่างเปล่า ไม่ตรงกับ userId จริงของผู้ใช้
+            return liff.getProfile().then(function (profile) {
+              liffDebugLog('✅ ได้ profile: ' + profile.displayName);
+              currentUserId = profile.userId;
+              setLiffStatus('✅ เชื่อมบัญชี LINE แล้ว: ' + profile.displayName, 'ok');
+
+              // เช็คสถานะแอดเพื่อนแยกต่างหาก ถ้า fail ก็ไม่กระทบ currentUserId ที่ได้มาแล้ว
+              return liff.getFriendship().then(function (friendship) {
+                isFriend = !!(friendship && friendship.friendFlag);
+                liffDebugLog('✅ friendFlag=' + isFriend);
+                if (!isFriend) {
+                  setLiffStatus('⚠️ ยังไม่ได้แอดเพื่อนบอท — จองได้ แต่จะไม่ได้รับแจ้งเตือนในไลน์', 'warn');
+                  showAddFriendButton();
+                }
+              }).catch(function (fErr) {
+                var fMsg = (fErr && (fErr.message || fErr.code)) ? (fErr.message || fErr.code) : String(fErr);
+                liffDebugLog('⚠️ getFriendship() ล้มเหลว (ไม่กระทบ userId ที่ได้แล้ว): ' + fMsg);
+                isFriend = false;
+              });
+            });
           }
           liffDebugLog('⚠️ ยังไม่ login — ข้ามการผูกบัญชี (ไม่เรียก liff.login() เพื่อกันหน้าค้าง)');
           return null;
-        }).then(function (result) {
+        }).then(function () {
           liffSettled = true;
           clearTimeout(timeoutId);
-          if (result && result[0] && result[0].userId) {
-            var profile = result[0];
-            var friendship = result[1];
-            currentUserId = profile.userId;
-            isFriend = !!(friendship && friendship.friendFlag);
-
-            liffDebugLog('✅ ได้ profile: ' + profile.displayName + ', friendFlag=' + isFriend);
-
-            if (isFriend) {
-              setLiffStatus('✅ เชื่อมบัญชี LINE แล้ว: ' + profile.displayName, 'ok');
-            } else {
-              setLiffStatus('⚠️ ยังไม่ได้แอดเพื่อนบอท — จองได้ แต่จะไม่ได้รับแจ้งเตือนในไลน์', 'warn');
-              showAddFriendButton();
-            }
-          } else {
+          if (!currentUserId) {
             setLiffStatus('⚠️ เปิดผ่านปุ่มในแอป LINE เพื่อผูกบัญชี (จองแบบไม่ผูกได้เช่นกัน)', 'warn');
           }
         }).catch(function (err) {
