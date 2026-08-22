@@ -720,6 +720,24 @@
         });
       }
 
+      /* ---------------- Full-screen loading overlay (SweetAlert2) ----------------
+         ใช้ระหว่างรอ apiPost ให้เสร็จ ทั้งตอนจองและตอนยกเลิก จะได้ไม่รู้สึกว่า
+         กดแล้ว "หายไปเฉยๆ" — Swal.fire ครั้งถัดไป (success/error) จะเข้ามาแทนที่
+         หน้าโหลดนี้ในโมดัลเดียวกันโดยอัตโนมัติ
+      --------------------------------------------------------------------- */
+      function showLoadingOverlay(title) {
+        Swal.fire({
+          title: title || 'กำลังดำเนินการ...',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          background: '#fff', color: '#1E3630',
+          didOpen: function () {
+            Swal.showLoading();
+          }
+        });
+      }
+
       /* ---------------- Icon library (inline SVG strings) ---------------- */
       const ICONS = {
         music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
@@ -961,6 +979,7 @@
 
         function doSubmit() {
           setButtonLoading(btn, true, 'กำลังบันทึก...', 'ยืนยันการจอง');
+          showLoadingOverlay('กำลังบันทึกการจอง...');
 
           apiPost('checkAndBook', {
             name: nameVal,
@@ -1175,6 +1194,8 @@
       }
 
       function runDelete(id, code) {
+        showLoadingOverlay('กำลังยกเลิกการจอง...');
+
         apiPost('deleteBooking', { id: id, code: code }).then(function (res) {
           if (res && res.status === 'success') {
             forgetMyBooking(id);
