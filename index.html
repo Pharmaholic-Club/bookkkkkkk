@@ -749,8 +749,40 @@
       }
  
       @media (max-width: 480px) {
-        .container { padding: 24px 20px; border-radius: 26px; }
-        body { padding-top: 24px; }
+        body {
+          padding: 12px 10px;
+          min-height: 100dvh;
+          align-items: center;
+        }
+        .container { padding: 16px 16px; border-radius: 20px; }
+
+        .brand { margin-bottom: 12px; gap: 6px; }
+        .logo-img { height: 42px; width: 42px; border-radius: 12px; }
+        .brand h2 { font-size: 1.1em; }
+        .brand span.tagline { font-size: 0.72em; }
+        .liff-badge { font-size: 0.6em; padding: 3px 9px; margin-top: 0; }
+        .add-friend-link { margin-top: 4px; font-size: 0.7em; padding: 5px 12px; }
+
+        .nav-tabs { margin-bottom: 12px; padding: 4px; border-radius: 14px; }
+        .nav-item { padding: 8px; font-size: 0.9em; gap: 5px; }
+        .nav-item .icon { width: 16px; height: 16px; }
+
+        .field { margin-bottom: 8px; }
+        label { font-size: 0.75em; margin-bottom: 3px; gap: 4px; }
+        label .label-icon { width: 13px; height: 13px; }
+        input, select {
+          padding: 9px 11px;
+          font-size: 14.5px;
+          border-radius: 11px;
+        }
+        .row-flex { gap: 8px; }
+
+        .btn-main {
+          padding: 11px;
+          font-size: 14.5px;
+          margin-top: 2px;
+          border-radius: 12px;
+        }
       }
  
       #page-book, #page-check {
