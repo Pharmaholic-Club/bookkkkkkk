@@ -1134,7 +1134,7 @@
       var savedName = localStorage.getItem('bookerName');
       if (savedName) document.querySelector('input[name="name"]').value = savedName;
  
-      const allTimes = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+      const allTimes = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
  
       function updateAvailableTimes() {
         var date = document.getElementById('bookDate').value;
@@ -1192,9 +1192,9 @@
  
         let start = parseInt(form.startTime.value.split(':')[0]);
         let duration = parseInt(form.duration.value);
-        if (start + duration > 21) {
+        if (start + duration > 23) {
           Swal.fire({
-            icon: 'error', title: 'เกินเวลา', text: 'ห้องปิด 21:00 น. ครับ',
+            icon: 'error', title: 'เกินเวลา', text: 'ห้องปิด 23:00 น. ครับ เฉพาะวันที่ 2-4 นี้',
             background: '#fff', color: '#1E3630', confirmButtonColor: '#45B399'
           });
           return;
